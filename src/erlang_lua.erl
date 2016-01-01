@@ -26,6 +26,11 @@
 start_link(Id) ->
 	start_link(Id, 0).
 
+% overload of 'start_link' which enables the 'Id' argument
+% in the other client interface functions to be the Pid of the gen_server
+start_link(Id, Tracelevel) when is_list(Id) ->
+	gen_server:start_link(?MODULE, [Id, Tracelevel], []);
+
 start_link(Id, Tracelevel) when Tracelevel >= 0 ->
 	gen_server:start_link({local, Id}, ?MODULE, [Id, Tracelevel], []).
 
@@ -258,8 +263,10 @@ flush_port_data(#state{infotext = Text} = State) ->
 	State#state{infotext = [], infoline = []}.
 
 
+mk_node_name(Id) when is_atom(Id) ->
+	mk_node_name(atom_to_list(Id));
 mk_node_name(Id) ->
-	This_Id = re:replace(atom_to_list(Id), "[^_0-9a-zA-Z]+", "_", [global, {return, list}]),
+	This_Id = re:replace(Id, "[^_0-9a-zA-Z]+", "_", [global, {return, list}]),
 	This_Host = string:sub_word(atom_to_list(node()), 2, $@),
 	{This_Id, This_Host, list_to_atom(lists:flatten([This_Id, "@", This_Host]))}.
 
