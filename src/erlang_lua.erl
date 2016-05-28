@@ -2,7 +2,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, start_link/2, lua/2, call/3, stop/1]).
+-export([start_link/1, start_link/2, start_link/3, lua/2, call/3, stop/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 % logging macros
@@ -25,14 +25,15 @@
 
 start_link(Id) ->
 	start_link(Id, 0).
-
+start_link(Id, Tracelevel) ->
+	start_link(Id, Tracelevel, _LuaPath=undefined).
 % overload of 'start_link' which enables the 'Id' argument
 % in the other client interface functions to be the Pid of the gen_server
-start_link(Id, Tracelevel) when is_list(Id) ->
-	gen_server:start_link(?MODULE, [Id, Tracelevel], []);
+start_link(Id, Tracelevel, LuaPath) when is_list(Id) ->
+	gen_server:start_link(?MODULE, [Id, Tracelevel, LuaPath], []);
 
-start_link(Id, Tracelevel) when Tracelevel >= 0 ->
-	gen_server:start_link({local, Id}, ?MODULE, [Id, Tracelevel], []).
+start_link(Id, Tracelevel, LuaPath) when Tracelevel >= 0 ->
+	gen_server:start_link({local, Id}, ?MODULE, [Id, Tracelevel, LuaPath], []).
 
 lua(Id, Code) when is_list(Code) ->
 	gen_server:call(Id, {exec, list_to_binary(Code)}, infinity);
@@ -58,7 +59,7 @@ stop(Id) ->
 }).
 -define(MAX_INFOTEXT_LINES, 1000).
 
-init([Id, Tracelevel]) ->
+init([Id, Tracelevel, LuaPath]) ->
 	process_flag(trap_exit, true),
 	{Clean_Id, Host, Lua_Node_Name} = mk_node_name(Id),
 	Path = case code:priv_dir(erlang_lua) of
@@ -76,7 +77,11 @@ init([Id, Tracelevel]) ->
 			{stop, Error};
 		{ok, Cmd} ->
 			?LOG_INFO(init, [{lua_node, Clean_Id}, {start, Cmd}]),
-			Port = open_port({spawn, Cmd}, [stream, {line, 100}, stderr_to_stdout, exit_status]),
+			Env = case LuaPath of
+				undefined -> [];
+				_ -> [{"LUA_PATH", LuaPath}]
+			end,
+			Port = open_port({spawn, Cmd}, [stream, {line, 100}, stderr_to_stdout, exit_status, {env, Env}]),
 			wait_for_startup(#state{id=Id, port=Port, mbox={lua, Lua_Node_Name}})
 	end.
 
